@@ -1,10 +1,16 @@
 # main.py
+import warnings
+from cryptography.utils import CryptographyDeprecationWarning
+
+# Suppress cryptography deprecation warnings
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+
 import MetaTrader5 as mt5
 import pytz
 from datetime import datetime, timedelta
 import time
 from notifications import send_discord_message
-from db import save_or_update_threshold_in_mongo, load_symbol_data
+from db import save_or_update_threshold_in_mongo
 
 # Initialize start_prices dictionary to keep track of prices for the current day
 start_prices = {}
@@ -54,11 +60,14 @@ def fetch_start_prices(symbols_config):
             if rates:
                 start_price = rates[0]['close']
 
-        # If a start price is successfully fetched, update the dictionary
+        # If a start price is successfully fetched, update the dictionary and save to MongoDB
         if start_price:
             start_prices[symbol] = start_price
             message = f"Fetched start price for {symbol}: {start_price}"
             send_discord_message(message)
+
+            # Save start price to MongoDB
+            save_or_update_threshold_in_mongo(symbol, start_price, start_price, 0, 0, "start", [], datetime.now(ist), datetime.now(ist))  # Saving start price
 
     return start_prices
 
@@ -108,7 +117,7 @@ def reset_trade_count_daily():
         print("Trade counts reset for a new day.")
 
 
-# Check if the pip difference hits the threshold and handle trade logic
+# Check if the pip difference hits the threshold and handle trade logic (place and close trades)
 def check_threshold(config, pip_difference, direction, trade_status, current_price):
     symbol = config['symbol']
     threshold = config['pip_difference']
@@ -138,28 +147,51 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
         print(f"Max trades reached for {symbol}. No further trades will be placed today.")
         return
 
-    # Check if a trade has already been placed (to prevent duplicate trades)
+    # Handle trade placement
+    if not trade_status['trade_placed']:
+        # Place trade if the pip difference threshold is reached or exceeded
+        if direction == 'up' and pip_difference >= threshold - tolerance:
+            place_trade(symbol, 'buy', lot_size, current_price)
+            trade_status['trade_placed'] = True
+            trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
+            trade_count[symbol] += 1  # Increment the trade count for this symbol
+
+            # Save threshold hit to MongoDB
+            save_or_update_threshold_in_mongo(symbol, start_prices[symbol], current_price, trade_status['trade_opened_at'], pip_difference, direction, [pip_difference], datetime.now(), datetime.now())
+
+            return
+
+        elif direction == 'down' and pip_difference <= -threshold + tolerance:
+            place_trade(symbol, 'sell', lot_size, current_price)
+            trade_status['trade_placed'] = True
+            trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
+            trade_count[symbol] += 1  # Increment the trade count for this symbol
+
+            # Save threshold hit to MongoDB
+            save_or_update_threshold_in_mongo(symbol, start_prices[symbol], current_price, trade_status['trade_opened_at'], pip_difference, direction, [pip_difference], datetime.now(), datetime.now())
+
+            return
+
+    # Handle trade closing
     if trade_status['trade_placed']:
-        print(f"Trade already placed for {symbol}, no new trades will be placed until it's closed.")
-        return
+        trade_opened_at = trade_status['trade_opened_at']
+        # Close trade at profit target
+        if (direction == 'up' and pip_difference >= trade_opened_at + close_trade_at) or \
+           (direction == 'down' and pip_difference <= trade_opened_at - close_trade_at):
+            close_trade(symbol, current_price)
+            trade_status['trade_placed'] = False
+            trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
+            print(f"Trade closed for {symbol} at {current_price} due to reaching profit target.")
+            return
 
-    # Open a trade if the pip_difference threshold is reached or exceeded
-    if direction == 'up' and pip_difference >= threshold - tolerance and not trade_status['trade_placed'] and trade_count[symbol] < MAX_TRADES_PER_DAY:
-        place_trade(symbol, 'buy', lot_size, current_price)
-        trade_status['trade_placed'] = True
-        trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
-        trade_count[symbol] += 1  # Increment the trade count for this symbol
-        return
-
-    elif direction == 'down' and pip_difference <= -threshold + tolerance and not trade_status['trade_placed'] and trade_count[symbol] < MAX_TRADES_PER_DAY:
-        place_trade(symbol, 'sell', lot_size, current_price)
-        trade_status['trade_placed'] = True
-        trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
-        trade_count[symbol] += 1  # Increment the trade count for this symbol
-        return
-
-    # Handle closing trades dynamically here
-    # ...
+        # Close trade if the price reverses (opposite direction) beyond a certain threshold
+        if (direction == 'down' and pip_difference <= trade_opened_at - close_trade_opposite) or \
+           (direction == 'up' and pip_difference >= trade_opened_at + close_trade_opposite):
+            close_trade(symbol, current_price)
+            trade_status['trade_placed'] = False
+            trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
+            print(f"Trade closed for {symbol} at {current_price} due to opposite direction movement.")
+            return
 
 
 # Placeholder for placing trade
