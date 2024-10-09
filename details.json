@@ -1,0 +1,30 @@
+{
+  "symbols": [
+    {
+      "symbol": "EURUSD",
+      "pip_difference": 15,
+      "close_trade_at": 10,
+      "close_trade_at_opposite_direction":7
+    },
+    {
+      "symbol": "GBPUSD",
+      "pip_difference": 15,
+      "close_trade_at": 5,
+       "close_trade_at_opposite_direction":7
+    },
+    {
+      "symbol": "USDJPY",
+      "pip_difference": 15,
+      "close_trade_at": 7,
+      "close_trade_at_opposite_direction":7
+    },
+    {
+      "symbol": "EURJPY",
+      "pip_difference": 15,
+      "close_trade_at": 7,
+      "close_trade_at_opposite_direction":7
+    }
+  ],
+  "timezone":"Asia/Kolkata",
+  "timeframe": "M5"
+}
