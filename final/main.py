@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import time
 from notifications import send_discord_message
 from db import save_or_update_threshold_in_mongo
+from trade_management import place_trade, close_trades_by_symbol
 
 # Initialize start_prices dictionary to keep track of prices for the current day
 start_prices = {}
@@ -151,7 +152,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
     if not trade_status['trade_placed']:
         # Place trade if the pip difference threshold is reached or exceeded
         if direction == 'up' and pip_difference >= threshold - tolerance:
-            place_trade(symbol, 'buy', lot_size, current_price)
+            place_trade_notify(symbol, 'buy', lot_size, current_price)
             trade_status['trade_placed'] = True
             trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
             trade_count[symbol] += 1  # Increment the trade count for this symbol
@@ -162,7 +163,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
             return
 
         elif direction == 'down' and pip_difference <= -threshold + tolerance:
-            place_trade(symbol, 'sell', lot_size, current_price)
+            place_trade_notify(symbol, 'sell', lot_size, current_price)
             trade_status['trade_placed'] = True
             trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
             trade_count[symbol] += 1  # Increment the trade count for this symbol
@@ -178,7 +179,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
         # Close trade at profit target
         if (direction == 'up' and pip_difference >= trade_opened_at + close_trade_at) or \
            (direction == 'down' and pip_difference <= trade_opened_at - close_trade_at):
-            close_trade(symbol, current_price)
+            close_trade_notify(symbol, current_price)
             trade_status['trade_placed'] = False
             trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
             print(f"Trade closed for {symbol} at {current_price} due to reaching profit target.")
@@ -187,7 +188,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
         # Close trade if the price reverses (opposite direction) beyond a certain threshold
         if (direction == 'down' and pip_difference <= trade_opened_at - close_trade_opposite) or \
            (direction == 'up' and pip_difference >= trade_opened_at + close_trade_opposite):
-            close_trade(symbol, current_price)
+            close_trade_notify(symbol, current_price)
             trade_status['trade_placed'] = False
             trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
             print(f"Trade closed for {symbol} at {current_price} due to opposite direction movement.")
@@ -195,15 +196,17 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
 
 
 # Placeholder for placing trade
-def place_trade(symbol, action, lot_size, current_price):
-    message = f"Placing {action} trade for {symbol} with {lot_size} lots at ${current_price}"
+def place_trade_notify(symbol, action, lot_size, current_price):
+    tarde_status = place_trade(symbol, action, 10, current_price )
+    message = f"Placing {action} trade for {symbol} with {lot_size} lots at ${current_price} Trade Status:{tarde_status}"
     print(message)
     send_discord_message(message)
 
 
 # Placeholder for closing trade
-def close_trade(symbol, current_price):
-    message = f"Closing trade for {symbol} at {current_price}"
+def close_trade_notify(symbol, current_price):
+    close_status = close_trades_by_symbol(symbol)
+    message = f"Closing trade for {symbol} at {current_price} status {close_status}"
     print(message)
     send_discord_message(message)
 

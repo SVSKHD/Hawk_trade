@@ -1,12 +1,11 @@
 import MetaTrader5 as mt5
 from notifications import send_discord_message
 
-
 def place_trade(symbol, order_type, volume, price=None, slippage=20, stop_loss=None, take_profit=None):
     """
     Places a trade order in MetaTrader 5.
     """
-    # Ensure symbol is selected
+    # Ensure the symbol is selected
     if not mt5.symbol_select(symbol, True):
         error_message = f"Failed to select {symbol} for trading."
         print(error_message)
@@ -26,25 +25,42 @@ def place_trade(symbol, order_type, volume, price=None, slippage=20, stop_loss=N
             print(error_message)
             return error_message
 
-    # Determine price if not provided
-    if price is None or price == 0:
-        if order_type == mt5.ORDER_TYPE_BUY:
-            price = mt5.symbol_info_tick(symbol).ask
-        else:
-            price = mt5.symbol_info_tick(symbol).bid
+    # Determine the order type
+    if order_type == 'buy':
+        order = mt5.ORDER_TYPE_BUY
+    elif order_type == 'sell':
+        order = mt5.ORDER_TYPE_SELL
+    else:
+        error_message = f"Invalid order type: {order_type}. Must be 'buy' or 'sell'."
+        print(error_message)
+        return error_message
+
+    # Determine the price if not provided
+    symbol_tick = mt5.symbol_info_tick(symbol)
+    if price is None:
+        if order_type == 'buy':
+            price = symbol_tick.ask if symbol_tick else None
+        elif order_type == 'sell':
+            price = symbol_tick.bid if symbol_tick else None
+
+    # Check if price is valid
+    if price is None:
+        error_message = f"Could not retrieve tick data for {symbol}, cannot determine price."
+        print(error_message)
+        return error_message
 
     # Prepare the order request
     order_request = {
-        "action": mt5.TRADE_ACTION_DEAL,  # Correct action for market order
+        "action": mt5.TRADE_ACTION_DEAL,  # Market order
         "symbol": symbol,
         "volume": volume,
-        "type": order_type,  # Correct order type
+        "type": order,  # Buy or sell order
         "price": price,
-        "deviation": slippage,  # Correct field name
-        "magic": 0,
-        "comment": "Raven Algo Trade",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_FOK,
+        "deviation": slippage,  # Slippage in points
+        "magic": 0,  # User-defined identifier
+        "comment": "Hawk Algo Trade",
+        "type_time": mt5.ORDER_TIME_GTC,  # Good till canceled
+        "type_filling": mt5.ORDER_FILLING_FOK,  # Fill or kill
     }
 
     # Include stop_loss and take_profit if provided
@@ -57,21 +73,15 @@ def place_trade(symbol, order_type, volume, price=None, slippage=20, stop_loss=N
     result = mt5.order_send(order_request)
 
     # Check if the order was placed successfully
-    if result is None:
-        # If result is None, retrieve the last error
-        error_code, error_message = mt5.last_error()
-        error_msg = f"Order send failed, error code: {error_code}, message: {error_message}"
-        print(error_msg)
-        return error_msg
-
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        error_msg = f"Order failed, retcode={result.retcode}, comment={result.comment}"
+    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+        error_msg = f"Order failed, retcode={result.retcode}, message={result.comment}"
         print(error_msg)
         return error_msg
 
     success_msg = f"Order placed successfully, order ticket={result.order}"
     print(success_msg)
     return success_msg
+
 
 
 def close_all_trades():
@@ -111,7 +121,7 @@ def close_all_trades():
             "position": ticket,
             "deviation": 20,
             "magic": 123456,  # Your unique identifier for trades
-            "comment": "Closing trade",
+            "comment": "Hawk Closing trade",
         }
 
         # Send close order
@@ -177,6 +187,10 @@ def close_trades_by_symbol(symbol):
         result = mt5.order_send(close_request)
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
-            print(f"Failed to close trade {ticket} for {symbol}, error code: {result.retcode}")
+            message=f"Failed to close trade {ticket} for {symbol}, error code: {result.retcode} from tarde_management"
+            print(message)
+            send_discord_message(message)
         else:
-            print(f"Successfully closed trade {ticket} for {symbol}.")
+            message=f"Successfully closed trade {ticket} for {symbol}. from trade_management"
+            print(message)
+            send_discord_message(message)
