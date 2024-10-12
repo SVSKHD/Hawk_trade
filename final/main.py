@@ -20,7 +20,7 @@ start_prices = {}
 trade_count = {}
 
 # Set the maximum number of trades allowed per day
-MAX_TRADES_PER_DAY = 2
+MAX_TRADES_PER_DAY = 5
 
 # Track the date of the last trade reset
 last_trade_reset = None
@@ -197,10 +197,33 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
 
 # Placeholder for placing trade
 def place_trade_notify(symbol, action, lot_size, current_price):
-    tarde_status = place_trade(symbol, action, 10, current_price )
-    message = f"Placing {action} trade for {symbol} with {lot_size} lots at ${current_price} Trade Status:{tarde_status}"
-    print(message)
-    send_discord_message(message)
+    print("trade",symbol, action, lot_size, current_price)
+
+    lot = 0.1
+    point = mt5.symbol_info(symbol).point
+    price = mt5.symbol_info_tick(symbol).ask
+    deviation = 20
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": lot,
+        "type": mt5.ORDER_TYPE_BUY if action=='buy' else mt5.ORDER_TYPE_SELL,
+        "price": current_price,
+        "deviation": deviation,
+        "magic": 234000,
+        "comment": "python script open",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling":  mt5.ORDER_FILLING_FOK,
+    }
+
+    # send a trading request
+    result = mt5.order_send(request)
+    # check the execution result
+    print(result)
+    print("1. order_send(): by {} {} lots at {} with deviation={} points".format(symbol, lot, price, deviation));
+
+    # # Assuming send_discord_message is defined somewhere in your code
+    # send_discord_message(message)  # Send the notification to Discord
 
 
 # Placeholder for closing trade
@@ -221,16 +244,24 @@ def fetch_current_price(symbol):
 # Fetch the start prices for symbols and calculate thresholds
 def main():
     symbols_config = [
+        # {
+        #     "symbol": "EURUSD",
+        #     "pip_difference": 15,  # Trade opens after 15 pips
+        #     "close_trade_at": 10,  # Trade closes at 10 pips profit
+        #     "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        #     "pip_size": 0.0001,
+        #     "lot_size": 10  # Trading 10 lots
+        # },
+        # {
+        #     "symbol": "USDJPY",
+        #     "pip_difference": 10,  # Trade opens after 10 pips (different pip difference for USDJPY)
+        #     "close_trade_at": 10,  # Trade closes at 10 pips profit
+        #     "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        #     "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
+        #     "lot_size": 10  # Trading 10 lots
+        # }
         {
-            "symbol": "EURUSD",
-            "pip_difference": 15,  # Trade opens after 15 pips
-            "close_trade_at": 10,  # Trade closes at 10 pips profit
-            "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-            "pip_size": 0.0001,
-            "lot_size": 10  # Trading 10 lots
-        },
-        {
-            "symbol": "USDJPY",
+            "symbol": "BTCUSD",
             "pip_difference": 10,  # Trade opens after 10 pips (different pip difference for USDJPY)
             "close_trade_at": 10,  # Trade closes at 10 pips profit
             "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
