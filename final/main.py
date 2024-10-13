@@ -243,32 +243,57 @@ def fetch_current_price(symbol):
 
 # Fetch the start prices for symbols and calculate thresholds
 def main():
+    
     symbols_config = [
-        # {
-        #     "symbol": "EURUSD",
-        #     "pip_difference": 15,  # Trade opens after 15 pips
-        #     "close_trade_at": 10,  # Trade closes at 10 pips profit
-        #     "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        #     "pip_size": 0.0001,
-        #     "lot_size": 10  # Trading 10 lots
-        # },
-        # {
-        #     "symbol": "USDJPY",
-        #     "pip_difference": 10,  # Trade opens after 10 pips (different pip difference for USDJPY)
-        #     "close_trade_at": 10,  # Trade closes at 10 pips profit
-        #     "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        #     "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
-        #     "lot_size": 10  # Trading 10 lots
-        # }
-        {
-            "symbol": "BTCUSD",
-            "pip_difference": 10,  # Trade opens after 10 pips (different pip difference for USDJPY)
-            "close_trade_at": 10,  # Trade closes at 10 pips profit
-            "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-            "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
-            "lot_size": 10  # Trading 10 lots
-        }
-    ]
+    {
+        "symbol": "EURUSD",
+        "pip_difference": 15,  # Trade opens after 15 pips
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.0001,
+        "lot_size": 10  # Trading 10 lots
+    },
+    {
+        "symbol": "USDJPY",
+        "pip_difference": 10,  # Trade opens after 10 pips
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
+        "lot_size": 10  # Trading 10 lots
+    },
+    {
+        "symbol": "GBPUSD",
+        "pip_difference": 15,  # Same as EURUSD
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.0001,
+        "lot_size": 10  # Trading 10 lots
+    },
+    {
+        "symbol": "EURJPY",
+        "pip_difference": 10,  # Same as USDJPY
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.01,  # Same pip size as USDJPY
+        "lot_size": 10  # Trading 10 lots
+    },
+    {
+        "symbol": "XAGUSD",  # Silver
+        "pip_difference": 15,  # Trade opens after 15 pips
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.01,  # Silver's pip size
+        "lot_size": 10  # Trading 10 lots
+    },
+    {
+        "symbol": "XAUUSD",  # Gold
+        "pip_difference": 15,  # Trade opens after 15 pips
+        "close_trade_at": 10,  # Trade closes at 10 pips profit
+        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+        "pip_size": 0.01,  # Gold's pip size
+        "lot_size": 10  # Trading 10 lots
+    }
+]
 
     global start_prices
     trade_status = {symbol['symbol']: {'trade_placed': False, 'cooldown_until': 0} for symbol in symbols_config}
