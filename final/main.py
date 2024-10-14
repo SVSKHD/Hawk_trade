@@ -227,7 +227,6 @@ def place_trade_notify(symbol, action, lot_size, current_price):
     print("trade",symbol, action, lot_size, current_price)
 
     lot = 1
-    point = mt5.symbol_info(symbol).point
     price = mt5.symbol_info_tick(symbol).ask
     deviation = 20
     request = {
