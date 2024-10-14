@@ -1,17 +1,11 @@
 # main.py
-import warnings
-from cryptography.utils import CryptographyDeprecationWarning
-
-# Suppress cryptography deprecation warnings
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
-
 import MetaTrader5 as mt5
 import pytz
 from datetime import datetime, timedelta
 import time
 from notifications import send_discord_message
 from db import save_or_update_threshold_in_mongo
-from trade_management import place_trade, close_trades_by_symbol
+from trade_management import close_trades_by_symbol
 
 # Initialize start_prices dictionary to keep track of prices for the current day
 start_prices = {}
@@ -232,7 +226,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
 def place_trade_notify(symbol, action, lot_size, current_price):
     print("trade",symbol, action, lot_size, current_price)
 
-    lot = 0.1
+    lot = 1
     point = mt5.symbol_info(symbol).point
     price = mt5.symbol_info_tick(symbol).ask
     deviation = 20

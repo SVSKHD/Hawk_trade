@@ -1,6 +1,4 @@
 import MetaTrader5 as mt5
-from django.db.models.expressions import result
-
 from notifications import send_discord_message
 
 
