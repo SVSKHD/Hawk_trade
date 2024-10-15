@@ -19,6 +19,7 @@ MAX_TRADES_PER_DAY = 2
 # Track the date of the last trade reset
 last_trade_reset = None
 
+
 # Connect to MetaTrader 5
 def connect_mt5():
     if not mt5.initialize():
@@ -34,6 +35,7 @@ def connect_mt5():
         return False
     print(f"Successfully logged into account {login} on server {server}")
     return True
+
 
 # Fetch the start price at 12 AM using the M5 timeframe, or fetch Friday’s closing price on Monday
 def fetch_start_prices(symbols_config):
@@ -65,9 +67,11 @@ def fetch_start_prices(symbols_config):
             send_discord_message(message)
 
             # Save start price to MongoDB
-            save_or_update_threshold_in_mongo(symbol, start_price, start_price, 0, 0, "start", [], datetime.now(ist), datetime.now(ist))  # Saving start price
+            save_or_update_threshold_in_mongo(symbol, start_price, start_price, 0, 0, "start", [], datetime.now(ist),
+                                              datetime.now(ist))  # Saving start price
 
     return start_prices
+
 
 # Fetch previous Friday’s closing price using the 5-minute timeframe for Monday
 def fetch_friday_closing_price(symbol):
@@ -85,6 +89,7 @@ def fetch_friday_closing_price(symbol):
         return closing_price
     return None
 
+
 # Calculate the pip difference and determine the direction
 def calculate_pip_difference(start_price, current_price, config):
     pip_size = config['pip_size']
@@ -96,6 +101,7 @@ def calculate_pip_difference(start_price, current_price, config):
     direction = 'up' if pip_difference > 0 else 'down'
 
     return pip_difference, direction  # Return only pip_difference and direction
+
 
 # Reset the trade count at the start of each day
 def reset_trade_count_daily():
@@ -111,6 +117,7 @@ def reset_trade_count_daily():
         trade_count = {symbol: 0 for symbol in trade_count}  # Reset the trade count for all symbols
         last_trade_reset = now  # Update the last reset time
         print("Trade counts reset for a new day.")
+
 
 # Check if the pip difference hits the threshold and handle trade logic (place and close trades)
 def check_threshold(config, pip_difference, direction, trade_status, current_price):
@@ -180,6 +187,7 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
             print(f"Trade closed for {symbol} at {current_price} due to hitting stop loss.")
             return
 
+
 # Function to place trade and send notifications
 def place_trade_notify(symbol, action, lot_size):
     # Ensure MT5 is initialized
@@ -241,12 +249,19 @@ def place_trade_notify(symbol, action, lot_size):
             now = datetime.now()
             send_discord_message(f"Trade executed successfully at {now}, order={result}")
 
+
 # Function to close trade and send notifications
 def close_trade_notify(symbol, current_price):
     close_status = close_trades_by_symbol(symbol)
-    message = f"Closing trade for {symbol} at {current_price} status {close_status}"
+    # Verify if positions are still open
+    positions = mt5.positions_get(symbol=symbol)
+    if positions is None or len(positions) == 0:
+        message = f"Successfully closed all trades for {symbol} at {current_price}."
+    else:
+        message = f"Some trades for {symbol} could not be closed. Status: {close_status}"
     print(message)
     send_discord_message(message)
+
 
 def fetch_current_price(symbol):
     # Fetch current price using MetaTrader 5 API
@@ -256,6 +271,7 @@ def fetch_current_price(symbol):
     else:
         print(f"Failed to get current price for {symbol}")
         return None
+
 
 # Fetch the start prices for symbols and calculate thresholds
 def main():
@@ -345,14 +361,15 @@ def main():
                         pip_difference, direction = calculate_pip_difference(start_price, current_price, config)
 
                         # Print the pip difference and direction for verification
-                        print(f"{symbol}: Start Price = {start_price}, Current Price = {current_price}, Pip Difference = {pip_difference:.2f}, Direction = {direction}")
+                        print(
+                            f"{symbol}: Start Price = {start_price}, Current Price = {current_price}, Pip Difference = {pip_difference:.2f}, Direction = {direction}")
 
                         # Check if a cooldown is in place before executing trade logic
                         if time.time() > trade_status[symbol]['cooldown_until']:
                             check_threshold(config, pip_difference, direction, trade_status[symbol], current_price)
 
-        # At the end of the loop, check if it's time to send the hourly update
-        if time.time() - last_discord_message_time >= 3600:
+        # At the end of the loop, check if it's time to send the update (every minute)
+        if time.time() - last_discord_message_time >= 60:
             message_data = []
             for config in symbols_config:
                 symbol = config['symbol']
@@ -375,7 +392,7 @@ def main():
                 }
                 message_data.append(symbol_data)
             # Format the message
-            message = "Hourly Update:\n"
+            message = "Update:\n"
             for data in message_data:
                 message += (
                     f"Symbol: {data['symbol']}, Start Price: {data['start_price']}, "
@@ -386,7 +403,8 @@ def main():
             send_discord_message(message)
             last_discord_message_time = time.time()
 
-        time.sleep(60)  # Check every minute
+        time.sleep(1)  # Check every second
+
 
 # Run the script
 if __name__ == "__main__":
