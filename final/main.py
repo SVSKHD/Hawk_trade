@@ -331,7 +331,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.0001,
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     },
     {
         "symbol": "USDJPY",
@@ -339,7 +339,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     },
     {
         "symbol": "GBPUSD",
@@ -347,7 +347,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.0001,
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     },
     {
         "symbol": "EURJPY",
@@ -355,7 +355,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.01,  # Same pip size as USDJPY
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     },
     {
         "symbol": "XAGUSD",  # Silver
@@ -363,7 +363,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.01,  # Silver's pip size
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     },
     {
         "symbol": "XAUUSD",  # Gold
@@ -371,7 +371,7 @@ def main():
         "close_trade_at": 10,  # Trade closes at 10 pips profit
         "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
         "pip_size": 0.01,  # Gold's pip size
-        "lot_size": 10  # Trading 10 lots
+        "lot_size": 10.0  # Trading 10 lots
     }
 ]
 
