@@ -19,7 +19,6 @@ MAX_TRADES_PER_DAY = 2
 # Track the date of the last trade reset
 last_trade_reset = None
 
-
 # Connect to MetaTrader 5
 def connect_mt5():
     if not mt5.initialize():
@@ -36,7 +35,6 @@ def connect_mt5():
     print(f"Successfully logged into account {login} on server {server}")
     return True
 
-
 # Fetch the start price at 12 AM using the M5 timeframe, or fetch Friday’s closing price on Monday
 def fetch_start_prices(symbols_config):
     ist = pytz.timezone('Asia/Kolkata')
@@ -46,14 +44,19 @@ def fetch_start_prices(symbols_config):
 
     for config in symbols_config:
         symbol = config['symbol']
+        start_price = None  # Initialize start_price to None
         if now.weekday() == 0:  # If today is Monday, get Friday's closing price
             start_price = fetch_friday_closing_price(symbol)
         else:
             # Fetch the 12 AM price even if the script starts later in the day
             start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            rates = mt5.copy_rates_from(symbol, mt5.TIMEFRAME_M5, start_of_day, 1)
-            if rates:
+            utc_from = start_of_day.astimezone(pytz.utc)
+            rates = mt5.copy_rates_from(symbol, mt5.TIMEFRAME_M5, utc_from, 1)
+            if rates is not None and len(rates) > 0:
                 start_price = rates[0]['close']
+            else:
+                print(f"Failed to get start price for {symbol}")
+                continue
 
         # If a start price is successfully fetched, update the dictionary and save to MongoDB
         if start_price:
@@ -66,22 +69,21 @@ def fetch_start_prices(symbols_config):
 
     return start_prices
 
-
 # Fetch previous Friday’s closing price using the 5-minute timeframe for Monday
 def fetch_friday_closing_price(symbol):
     today = datetime.now(pytz.timezone('Asia/Kolkata'))
     days_ago = (today.weekday() + 3) % 7 + 2  # Calculate how many days back to get to last Friday
     last_friday = today - timedelta(days=days_ago)
     last_friday = last_friday.replace(hour=23, minute=59, second=59)
+    utc_from = last_friday.astimezone(pytz.utc)
 
     # Fetch the last 5-minute candle of last Friday
-    rates = mt5.copy_rates_from(symbol, mt5.TIMEFRAME_M5, last_friday, 1)
-    if rates:
+    rates = mt5.copy_rates_from(symbol, mt5.TIMEFRAME_M5, utc_from, 1)
+    if rates is not None and len(rates) > 0:
         closing_price = rates[0]['close']
         print(f"Fetched last Friday's closing price for {symbol}: {closing_price}")
         return closing_price
     return None
-
 
 # Calculate the pip difference and determine the direction
 def calculate_pip_difference(start_price, current_price, config):
@@ -94,7 +96,6 @@ def calculate_pip_difference(start_price, current_price, config):
     direction = 'up' if pip_difference > 0 else 'down'
 
     return pip_difference, direction  # Return only pip_difference and direction
-
 
 # Reset the trade count at the start of each day
 def reset_trade_count_daily():
@@ -110,7 +111,6 @@ def reset_trade_count_daily():
         trade_count = {symbol: 0 for symbol in trade_count}  # Reset the trade count for all symbols
         last_trade_reset = now  # Update the last reset time
         print("Trade counts reset for a new day.")
-
 
 # Check if the pip difference hits the threshold and handle trade logic (place and close trades)
 def check_threshold(config, pip_difference, direction, trade_status, current_price):
@@ -141,88 +141,46 @@ def check_threshold(config, pip_difference, direction, trade_status, current_pri
         if direction == 'up' and pip_difference >= threshold - tolerance:
             place_trade_notify(symbol, 'buy', lot_size)
             trade_status['trade_placed'] = True
-            trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
-            trade_count[symbol] += 1  # Increment the trade count for this symbol
-
-            # Save threshold hit to MongoDB
-            save_or_update_threshold_in_mongo(
-                symbol,
-                start_prices[symbol],
-                current_price,
-                trade_status['trade_opened_at'],
-                pip_difference,
-                direction,
-                [pip_difference],
-                datetime.now(),
-                datetime.now()
-            )
+            trade_status['trade_opened_at'] = pip_difference
+            trade_status['trade_direction'] = 'buy'
+            trade_count[symbol] += 1
             return
-
         elif direction == 'down' and pip_difference <= -threshold + tolerance:
             place_trade_notify(symbol, 'sell', lot_size)
             trade_status['trade_placed'] = True
-            trade_status['trade_opened_at'] = pip_difference  # Track where the trade was opened
-            trade_count[symbol] += 1  # Increment the trade count for this symbol
-
-            # Save threshold hit to MongoDB
-            save_or_update_threshold_in_mongo(
-                symbol,
-                start_prices[symbol],
-                current_price,
-                trade_status['trade_opened_at'],
-                pip_difference,
-                direction,
-                [pip_difference],
-                datetime.now(),
-                datetime.now()
-            )
+            trade_status['trade_opened_at'] = pip_difference
+            trade_status['trade_direction'] = 'sell'
+            trade_count[symbol] += 1
             return
 
     # Handle trade closing
     if trade_status['trade_placed']:
         trade_opened_at = trade_status['trade_opened_at']
+        trade_direction = trade_status['trade_direction']
+
+        # Calculate profit/loss pip difference from trade open point
+        if trade_direction == 'buy':
+            profit_pip_difference = pip_difference - trade_opened_at
+        else:  # trade_direction == 'sell'
+            profit_pip_difference = trade_opened_at - pip_difference
 
         # Close trade at profit target
-        if (direction == 'up' and pip_difference >= trade_opened_at + close_trade_at) or \
-                (direction == 'down' and pip_difference <= trade_opened_at - close_trade_at):
+        if profit_pip_difference >= close_trade_at:
             close_trade_notify(symbol, current_price)
             trade_status['trade_placed'] = False
-            trade_status['cooldown_until'] = time.time() + 60  # Cooldown after closing a trade
+            trade_status['cooldown_until'] = time.time() + 60
             print(f"Trade closed for {symbol} at {current_price} due to reaching profit target.")
             return
 
-        # Close trade if the price reverses beyond a certain threshold (stop-loss)
-        if (direction == 'up' and pip_difference <= trade_opened_at - close_trade_opposite) or \
-                (direction == 'down' and pip_difference >= trade_opened_at + close_trade_opposite):
+        # Close trade if the price reverses beyond stop-loss threshold
+        if profit_pip_difference <= -close_trade_opposite:
             close_trade_notify(symbol, current_price)
             trade_status['trade_placed'] = False
-            trade_status['cooldown_until'] = time.time() + 60  # Cooldown after closing a trade
-            print(f"Trade closed for {symbol} at {current_price} due to price reversal.")
+            trade_status['cooldown_until'] = time.time() + 60
+            print(f"Trade closed for {symbol} at {current_price} due to hitting stop loss.")
             return
 
-    # Handle trade closing
-    if trade_status['trade_placed']:
-        trade_opened_at = trade_status['trade_opened_at']
-        # Close trade at profit target
-        if (direction == 'up' and pip_difference >= trade_opened_at + close_trade_at) or \
-           (direction == 'down' and pip_difference <= trade_opened_at - close_trade_at):
-            close_trade_notify(symbol, current_price)
-            trade_status['trade_placed'] = False
-            trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
-            print(f"Trade closed for {symbol} at {current_price} due to reaching profit target.")
-            return
-
-        # Close trade if the price reverses (opposite direction) beyond a certain threshold
-        if (direction == 'down' and pip_difference <= trade_opened_at - close_trade_opposite) or \
-           (direction == 'up' and pip_difference >= trade_opened_at + close_trade_opposite):
-            close_trade_notify(symbol, current_price)
-            trade_status['trade_placed'] = False
-            trade_status['cooldown_until'] = time.time() + 60  # Cooldown of 60 seconds after closing a trade
-            print(f"Trade closed for {symbol} at {current_price} due to opposite direction movement.")
-            return
-
-
-# Placeholder for placing trade
+# Function to place trade and send notifications
 def place_trade_notify(symbol, action, lot_size):
     # Ensure MT5 is initialized
     if not mt5.initialize():
@@ -231,18 +189,9 @@ def place_trade_notify(symbol, action, lot_size):
 
     print(f"Initialized MetaTrader 5 for trading with symbol {symbol}")
 
-    # Check for initialization errors
-    print(f"Initialization error: {mt5.last_error()}")
-
     # Ensure the symbol is available
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select symbol {symbol}")
-        mt5.shutdown()
-        return
-
-    symbol_info = mt5.symbol_info(symbol)
-    if symbol_info is None:
-        print(f"Symbol info not available for {symbol}")
         mt5.shutdown()
         return
 
@@ -254,7 +203,7 @@ def place_trade_notify(symbol, action, lot_size):
         return
 
     # Set price based on buy or sell action
-    price = price_info.bid
+    price = price_info.ask if action == 'buy' else price_info.bid
     print(f"Price for {action}: {price}")
 
     # Define request parameters
@@ -270,7 +219,7 @@ def place_trade_notify(symbol, action, lot_size):
         "magic": 234000,
         "comment": "python script open",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_FOK,  # Try ORDER_FILLING_IOC
+        "type_filling": mt5.ORDER_FILLING_FOK,  # You can also try mt5.ORDER_FILLING_IOC
     }
 
     print("Request parameters:", request)
@@ -281,102 +230,88 @@ def place_trade_notify(symbol, action, lot_size):
     # Check the result and print details
     if result is None:
         print("Order send failed: no result returned")
-        send_discord_message(f"Order send error when it is none for clear error description: {mt5.last_error()}")
+        send_discord_message(f"Order send error: {mt5.last_error()}")
     else:
         print("Order send result:")
         print(f"  retcode: {result.retcode}")
-        print(f"  deal: {result.deal}")
-        print(f"  order: {result.order}")
-        print(f"  price: {result.price}")
-        print(f"  comment: {result.comment}")
-        print(f"  request_id: {result.request_id}")
-        print(f"  bid: {result.bid}")
-        print(f"  ask: {result.ask}")
-        print(f"  volume: {result.volume}")
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             print(f"Trade request failed, retcode={result.retcode}")
+            send_discord_message(f"Trade request failed for {symbol}, retcode={result.retcode}")
         else:
             now = datetime.now()
             send_discord_message(f"Trade executed successfully at {now}, order={result}")
 
-    # Shutdown the connection
-    mt5.shutdown()
-
-    # # Assuming send_discord_message is defined somewhere in your code
-    # send_discord_message(message)  # Send the notification to Discord
-
-
-# Placeholder for closing trade
+# Function to close trade and send notifications
 def close_trade_notify(symbol, current_price):
     close_status = close_trades_by_symbol(symbol)
     message = f"Closing trade for {symbol} at {current_price} status {close_status}"
     print(message)
     send_discord_message(message)
 
-
 def fetch_current_price(symbol):
     # Fetch current price using MetaTrader 5 API
     tick = mt5.symbol_info_tick(symbol)
     if tick:
         return tick.bid  # or tick.ask depending on your logic
-
+    else:
+        print(f"Failed to get current price for {symbol}")
+        return None
 
 # Fetch the start prices for symbols and calculate thresholds
 def main():
-    
     symbols_config = [
-    {
-        "symbol": "EURUSD",
-        "pip_difference": 15,  # Trade opens after 15 pips
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.0001,
-        "lot_size": 10.0  # Trading 10 lots
-    },
-    {
-        "symbol": "USDJPY",
-        "pip_difference": 10,  # Trade opens after 10 pips
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.01,  # Pip size for USDJPY is typically 0.01
-        "lot_size": 10.0  # Trading 10 lots
-    },
-    {
-        "symbol": "GBPUSD",
-        "pip_difference": 15,  # Same as EURUSD
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.0001,
-        "lot_size": 10.0  # Trading 10 lots
-    },
-    {
-        "symbol": "EURJPY",
-        "pip_difference": 10,  # Same as USDJPY
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.01,  # Same pip size as USDJPY
-        "lot_size": 10.0  # Trading 10 lots
-    },
-    {
-        "symbol": "XAGUSD",  # Silver
-        "pip_difference": 15,  # Trade opens after 15 pips
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.01,  # Silver's pip size
-        "lot_size": 10.0  # Trading 10 lots
-    },
-    {
-        "symbol": "XAUUSD",  # Gold
-        "pip_difference": 15,  # Trade opens after 15 pips
-        "close_trade_at": 10,  # Trade closes at 10 pips profit
-        "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
-        "pip_size": 0.01,  # Gold's pip size
-        "lot_size": 10.0  # Trading 10 lots
-    }
-]
+        {
+            "symbol": "EURUSD",
+            "pip_difference": 15,  # Trade opens after 15 pips
+            "close_trade_at": 10,  # Trade closes at 10 pips profit
+            "close_trade_at_opposite_direction": 7,  # Close trade if the price reverses by 7 pips
+            "pip_size": 0.0001,
+            "lot_size": 1.0  # Trading 1 lot
+        },
+        {
+            "symbol": "USDJPY",
+            "pip_difference": 10,  # Trade opens after 10 pips
+            "close_trade_at": 10,
+            "close_trade_at_opposite_direction": 7,
+            "pip_size": 0.01,
+            "lot_size": 1.0
+        },
+        {
+            "symbol": "GBPUSD",
+            "pip_difference": 15,  # Same as EURUSD
+            "close_trade_at": 10,
+            "close_trade_at_opposite_direction": 7,
+            "pip_size": 0.0001,
+            "lot_size": 1.0
+        },
+        {
+            "symbol": "EURJPY",
+            "pip_difference": 10,  # Same as USDJPY
+            "close_trade_at": 10,
+            "close_trade_at_opposite_direction": 7,
+            "pip_size": 0.01,
+            "lot_size": 1.0
+        },
+        {
+            "symbol": "XAGUSD",  # Silver
+            "pip_difference": 15,
+            "close_trade_at": 10,
+            "close_trade_at_opposite_direction": 7,
+            "pip_size": 0.01,
+            "lot_size": 1.0
+        },
+        {
+            "symbol": "XAUUSD",  # Gold
+            "pip_difference": 15,
+            "close_trade_at": 10,
+            "close_trade_at_opposite_direction": 7,
+            "pip_size": 0.01,
+            "lot_size": 1.0
+        }
+    ]
 
     global start_prices
-    trade_status = {symbol['symbol']: {'trade_placed': False, 'cooldown_until': 0} for symbol in symbols_config}
+    trade_status = {config['symbol']: {'trade_placed': False, 'cooldown_until': 0} for config in symbols_config}
 
     # Connect to MetaTrader 5
     if not connect_mt5():
@@ -385,6 +320,9 @@ def main():
     # Fetch the start prices once at the beginning of the script
     if not start_prices:
         start_prices = fetch_start_prices(symbols_config)
+
+    # Time when the last Discord message was sent
+    last_discord_message_time = time.time()
 
     while True:
         ist = pytz.timezone('Asia/Kolkata')
@@ -413,8 +351,42 @@ def main():
                         if time.time() > trade_status[symbol]['cooldown_until']:
                             check_threshold(config, pip_difference, direction, trade_status[symbol], current_price)
 
-        time.sleep(60)  # Check every minute
+        # At the end of the loop, check if it's time to send the hourly update
+        if time.time() - last_discord_message_time >= 3600:
+            message_data = []
+            for config in symbols_config:
+                symbol = config['symbol']
+                start_price = start_prices.get(symbol)
+                current_price = fetch_current_price(symbol)
+                if start_price is None or current_price is None:
+                    continue
+                pip_difference, direction = calculate_pip_difference(start_price, current_price, config)
+                trade_status_symbol = trade_status[symbol]
+                if trade_status_symbol['trade_placed']:
+                    trade_info = f"Trade is placed and running at {current_price}"
+                else:
+                    trade_info = "No trade placed"
+                symbol_data = {
+                    'symbol': symbol,
+                    'start_price': start_price,
+                    'current_price': current_price,
+                    'pip_difference': round(pip_difference, 2),
+                    'trade_status': trade_info
+                }
+                message_data.append(symbol_data)
+            # Format the message
+            message = "Hourly Update:\n"
+            for data in message_data:
+                message += (
+                    f"Symbol: {data['symbol']}, Start Price: {data['start_price']}, "
+                    f"Current Price: {data['current_price']}, Pip Difference: {data['pip_difference']}, "
+                    f"Trade Status: {data['trade_status']}\n"
+                )
+            # Send the message to Discord
+            send_discord_message(message)
+            last_discord_message_time = time.time()
 
+        time.sleep(60)  # Check every minute
 
 # Run the script
 if __name__ == "__main__":
