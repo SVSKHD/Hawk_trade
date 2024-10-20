@@ -4,8 +4,6 @@ from datetime import datetime, timedelta
 import pytz
 import MetaTrader5 as mt5  # Ensure MetaTrader5 is imported
 from db import save_or_update_threshold_in_mongo
-from pip_difference import pip_difference
-from poc3 import start_prices
 
 price_array_update = []
 
@@ -16,7 +14,8 @@ counter = 1
 symbols_config = [
     {
         "symbol": "BTCUSD",
-        "pip_difference": 100,
+        "positive_pip_difference": 100,  # Positive threshold
+        "negative_pip_difference": -100, # Negative threshold
         "close_trade_at": 10,
         "close_trade_at_opposite_direction": 7,
         "pip_size": 1,
@@ -24,7 +23,8 @@ symbols_config = [
     },
     {
         "symbol": "EURUSD",
-        "pip_difference": 15,
+        "positive_pip_difference": 15,
+        "negative_pip_difference": -15,
         "close_trade_at": 10,
         "close_trade_at_opposite_direction": 8,
         "pip_size": 0.0001,
@@ -32,7 +32,8 @@ symbols_config = [
     },
     {
         "symbol": "USDJPY",
-        "pip_difference": 10,
+        "positive_pip_difference": 10,
+        "negative_pip_difference": -10,
         "close_trade_at": 10,
         "close_trade_at_opposite_direction": 7,
         "pip_size": 0.01,
@@ -41,9 +42,20 @@ symbols_config = [
 ]
 
 # Initialize MetaTrader5
-if not mt5.initialize():
-    print("MetaTrader5 initialization failed")
-    quit()
+def connect_mt5():
+    if not mt5.initialize():
+        print("Failed to initialize MetaTrader5")
+        return False
+    login = 213171528  # Login provided
+    password = "AHe@Yps3"  # Password provided
+    server = "OctaFX-Demo"  # Server provided
+
+    authorized = mt5.login(login, password=password, server=server)
+    if not authorized:
+        print(f"Login failed for account {login}")
+        return False
+    print(f"Successfully logged into account {login} on server {server}")
+    return True
 
 
 def fetch_current_price(symbol):
@@ -97,59 +109,68 @@ def fetch_friday_closing_price(symbol):
     return None
 
 
-def price_difference(symbol, start_price, current_price, pip_size):
-    result = current_price - start_price
-    if symbol == symbol:
-        return result / pip_size
+def price_difference(start_price, current_price, pip_size):
+    return (current_price - start_price) / pip_size
 
 
-while True:
-    counter += 1
-    print(f"Running {counter}")
+def main():
+    global last_hourly_check, counter  # Declare global variables
 
-    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    if connect_mt5():
+        while True:
+            counter += 1
+            print(f"Running {counter}")
 
-    # Clear the list at the beginning of each cycle to ensure fresh updates
-    price_array_update.clear()
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
-    for symbol in symbols_config:
-        symbol_name = symbol["symbol"]
-        symbol_pip_difference = symbol["pip_difference"]
-        place_trade_pips = symbol["close_trade_at"]
-        close_trade_at_opposite_pips = symbol["close_trade_at_opposite_direction"]
-        symbol_pip_size = symbol["pip_size"]
-        symbol_lot_size = symbol["lot_size"]
+            # Clear the list at the beginning of each cycle to ensure fresh updates
+            price_array_update.clear()
 
-        current_price = fetch_current_price(symbol_name)
-        start_price = fetch_start_price(symbol_name)
+            # Accumulate messages for all symbols
+            messages = []
 
-        # Check if start_price and current_price are valid
-        if current_price is not None and start_price is not None:
-            pip_difference_at_symbol = price_difference(symbol_name, start_price, current_price, symbol_pip_size)
+            for symbol in symbols_config:
+                symbol_name = symbol["symbol"]
+                positive_pip_difference = symbol["positive_pip_difference"]
+                negative_pip_difference = symbol["negative_pip_difference"]
+                symbol_pip_size = symbol["pip_size"]
 
-            if pip_difference_at_symbol is not None:
-                if pip_difference_at_symbol <= symbol_pip_difference:
-                    direction = "sell"
-                else:
-                    direction = "buy"
+                current_price = fetch_current_price(symbol_name)
+                start_price = fetch_start_price(symbol_name)
 
-                # Create the format dictionary correctly
-                format_message = {
-                    "symbol": symbol_name,
-                    "current_price": current_price,
-                    "start_price": start_price,
-                    "pip_difference": pip_difference_at_symbol,
-                    "direction": direction,
-                    "timestamp": current_time
-                }
-                print(f"Symbol: {format_message}")
+                # Check if start_price and current_price are valid
+                if current_price is not None and start_price is not None:
+                    pip_difference_at_symbol = price_difference(start_price, current_price, symbol_pip_size)
 
-                # Check if an hour has passed since the last message was sent
-                if time.time() - last_hourly_check >= 3600:
-                    send_discord_message(f"Details {format_message}")
-                    last_hourly_check = time.time()
+                    # Determine if the pip difference exceeds either the positive or negative threshold
+                    if pip_difference_at_symbol >= positive_pip_difference:
+                        direction = "buy"
+                        movement = f"+{pip_difference_at_symbol:.2f} pips (exceeds +{positive_pip_difference} pips)"
+                    elif pip_difference_at_symbol <= negative_pip_difference:
+                        direction = "sell"
+                        movement = f"{pip_difference_at_symbol:.2f} pips (exceeds {negative_pip_difference} pips)"
+                    else:
+                        direction = "hold"
+                        movement = f"{pip_difference_at_symbol:.2f} pips (within range)"
 
-    # Reset the timer for the loop interval
-    start_time = time.time()
+                    # Create the format dictionary for log message
+                    format_message = (
+                        f"Symbol: {symbol_name}, Current Price: {current_price}, "
+                        f"Start Price: {start_price}, Pip Difference: {movement}, "
+                        f"Direction: {direction}, Time: {current_time}"
+                    )
 
-    time.sleep(1)
+                    # Add message to the list if there's significant movement
+                    if direction != "hold":
+                        messages.append(format_message)
+
+            # Send all messages to Discord if there are significant movements and time interval is met
+            if messages and time.time() - last_hourly_check >= 60:
+                combined_message = "\n".join(messages)
+                send_discord_message(combined_message)
+                last_hourly_check = time.time()
+
+            time.sleep(1)  # Sleep for 1 second to prevent tight loop
+
+if __name__ == "__main__":
+    main()
