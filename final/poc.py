@@ -26,6 +26,15 @@ symbols_config = [
         "lot_size": 1.0
     },
     {
+        "symbol": "GBPUSD",
+        "positive_pip_difference": 15,
+        "negative_pip_difference": -15,
+        "close_trade_at": 10,
+        "close_trade_at_opposite_direction": 8,
+        "pip_size": 0.0001,
+        "lot_size": 1.0
+    },
+    {
         "symbol": "USDJPY",
         "positive_pip_difference": 1,
         "negative_pip_difference": -1,
