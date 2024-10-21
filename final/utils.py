@@ -195,3 +195,40 @@ def close_trades_by_symbol(symbol):
             print(message)
             send_discord_message(message)
 
+
+
+def format_message(message_type, data):
+    """Format messages for notifications and hourly updates."""
+    direction_symbols = {"Upper": "↑", "Down": "↓", "Neutral": "-"}
+    direction_symbol = direction_symbols.get(data["direction"], "-")
+
+    if message_type == "pip_difference":
+        formatted_message = f"""
+
+**{data["symbol"]} {direction_symbol}**
+
+**Start Price:** **{data["start_price"]}**
+**Current Price:** **{data["current_price"]}**
+**Pip Difference:** **{data["pip_difference"]}**
+**Direction:** {direction_symbol} {data["direction"]}
+
+"""
+        return formatted_message.strip()
+    elif message_type == "hourly_update":
+        formatted_message = f"""
+
+--------------------------------------------------Hourly Update--------------------------------------------------
+
+**Symbol:** {data["symbol"]}
+**Start Price:** **{data["start_price"]}**
+**Current Price:** **{data["current_price"]}**
+**Pip Difference:** **{data["pip_difference"]}**
+**Direction:** {direction_symbol} {data["direction"]}
+
+**Pips to Positive Threshold:** {data["pips_to_positive_threshold"]}
+**Pips to Negative Threshold:** {data["pips_to_negative_threshold"]}
+
+"""
+        return formatted_message.strip()
+    else:
+        return str(data)

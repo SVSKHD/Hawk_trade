@@ -11,10 +11,10 @@ from trade_management import place_trade, close_trades_by_symbol
 symbols_config = [
     {
         "symbol": "EURUSD",
-        "positive_pip_difference": 1,
-        "negative_pip_difference": -1,
-        "positive_pip_range": 2,  # Buffer range for positive pips
-        "negative_pip_range": -2,  # Buffer range for negative pips
+        "positive_pip_difference": 15,
+        "negative_pip_difference": -15,
+        "positive_pip_range": 17,  # Buffer range for positive pips
+        "negative_pip_range": -17,  # Buffer range for negative pips
         "close_trade_at": 10,
         "close_trade_at_opposite_direction": 8,
         "pip_size": 0.0001,
@@ -33,10 +33,10 @@ symbols_config = [
     },
     {
         "symbol": "USDJPY",
-        "positive_pip_difference": 1,
-        "negative_pip_difference": -1,
-        "positive_pip_range": 2,
-        "negative_pip_range": -2,
+        "positive_pip_difference": 15,
+        "negative_pip_difference": -15,
+        "positive_pip_range": 17,
+        "negative_pip_range": -17,
         "close_trade_at": 10,
         "close_trade_at_opposite_direction": 7,
         "pip_size": 0.01,
@@ -124,6 +124,11 @@ def main_loop():
                         direction = determine_direction_with_range(
                             pip_diff, positive_pip_diff, negative_pip_diff, positive_range, negative_range
                         )
+
+                        if pips_to_positive_threshold:
+                            print(f"{symbol_name}-{pips_to_negative_threshold}-{direction}")
+                        elif pips_to_negative_threshold:
+                            print(f"{symbol_name}-{pips_to_negative_threshold}-{direction}")
 
                         current_direction[symbol_name] = direction
 
