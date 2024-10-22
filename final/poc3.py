@@ -3,7 +3,7 @@ import pytz
 from datetime import datetime, timedelta
 
 from Hawk_trade.poc1 import fetch_start_prices
-from utils import fetch_current_price, fetch_start_price, connect_mt5, format_message
+from utils import fetch_current_price, fetch_start_price, connect_mt5, format_message, place_trade_notify, close_trades_by_symbol
 from notifications import send_discord_message
 import time
 import logging
@@ -91,6 +91,7 @@ def main_loop():
             for symbol in symbols_config:
                 symbol_name = symbol["symbol"]
                 pip_size = symbol["pip_size"]
+                symbol_lot_size = symbol["lot_size"]
                 positive_pip_diff = symbol["positive_pip_difference"]
                 negative_pip_diff = symbol["negative_pip_difference"]
                 positive_range = symbol["positive_pip_range"]
@@ -116,12 +117,12 @@ def main_loop():
                     # Trade placement logic (trades only placed once)
                     if direction == "Upper" and not trades_placed[symbol_name]:
                         logging.info(f"{symbol_name}: Entering positive range. Placing upward trade.")
-                        # place_trade(symbol_name, direction)
+                        place_trade_notify(symbol_name, "buy", symbol_lot_size)
                         send_discord_message(f"{symbol_name}-{direction}-{start_price}-{current_price}")
                         trades_placed[symbol_name] = True  # Mark trade as placed
                     elif direction == "Down" and not trades_placed[symbol_name]:
                         logging.info(f"{symbol_name}: Entering negative range. Placing downward trade.")
-                        # place_trade(symbol_name, direction)
+                        place_trade_notify(symbol_name, "sell", symbol_lot_size)
                         send_discord_message(f"{symbol_name}-{direction}-{start_price}-{current_price}")
                         trades_placed[symbol_name] = True  # Mark trade as placed
 
@@ -185,11 +186,11 @@ def main_loop():
                         # Trade placement logic in hourly update (trades only placed once)
                         if direction == "Upper" and not trades_placed[symbol_name]:
                             logging.info(f"{symbol_name}: Entering positive range. Placing upward trade.")
-                            place_trade(symbol_name, direction)
+                            # place_trade(symbol_name, direction)
                             trades_placed[symbol_name] = True  # Mark trade as placed
                         elif direction == "Down" and not trades_placed[symbol_name]:
                             logging.info(f"{symbol_name}: Entering negative range. Placing downward trade.")
-                            place_trade(symbol_name, direction)
+                            # place_trade(symbol_name, direction)
                             trades_placed[symbol_name] = True  # Mark trade as placed
 
                         data = {
