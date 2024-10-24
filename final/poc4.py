@@ -1,8 +1,6 @@
 import MetaTrader5 as mt5
 import pytz
 from datetime import datetime, timedelta
-
-from Hawk_trade.poc1 import fetch_start_prices
 from utils import fetch_current_price, fetch_start_price, connect_mt5, format_message, place_trade_notify, close_trades_by_symbol
 from notifications import send_discord_message
 import time
@@ -99,7 +97,6 @@ def main_loop():
 
             # Update start prices at 12 AM and reset trade placement flag
             if current_time.hour == 0 and current_time.minute == 0 and current_time.second == 0:
-                update_start_prices()
                 trades_placed = {symbol["symbol"]: False for symbol in symbols_config}  # Reset trade placement
                 entry_prices = {symbol["symbol"]: None for symbol in symbols_config}  # Reset entry prices
 
