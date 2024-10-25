@@ -31,7 +31,7 @@ async def send_hourly_update(symbol):
 async def scheduler(symbols):
     while True:
         current_time = datetime.now()
-        wait_time = 60 - (current_time.minute * 60 + current_time.second)  # Wait until the next hour
+        wait_time = 3600 - (current_time.minute * 60 + current_time.second)  # Wait until the next hour
         print(f"Waiting for {wait_time} seconds until the next hourly update...")
 
         await asyncio.sleep(wait_time)  # Wait until the next hour

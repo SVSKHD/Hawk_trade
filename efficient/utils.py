@@ -24,8 +24,9 @@ async def connect_mt5():
     return True
 
 async def fetch_current_price(symbol):
+    symbol_name = symbol["symbol"]
     """Asynchronously fetch the current price for a symbol."""
-    tick = await asyncio.to_thread(mt5.symbol_info_tick, symbol)
+    tick = await asyncio.to_thread(mt5.symbol_info_tick, symbol_name)
     if tick:
         return tick.bid  # or tick.ask depending on your logic
     else:
@@ -33,6 +34,7 @@ async def fetch_current_price(symbol):
         return None
 
 async def fetch_start_price(symbol):
+    symbol_name = symbol["symbol"]
     """Asynchronously fetch the start price of the day for a symbol."""
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
@@ -43,7 +45,7 @@ async def fetch_start_price(symbol):
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         utc_from = start_of_day.astimezone(pytz.utc)
 
-        rates = await asyncio.to_thread(mt5.copy_rates_from, symbol, mt5.TIMEFRAME_M5, utc_from, 1)
+        rates = await asyncio.to_thread(mt5.copy_rates_from, symbol_name, mt5.TIMEFRAME_M5, utc_from, 1)
         if rates is not None and len(rates) > 0:
             start_price = rates[0]['close']
         else:
@@ -213,16 +215,15 @@ async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
 
 async def check_thresholds(symbol, pip_difference):
-    """Asynchronously checks thresholds and calculates the number of thresholds reached."""
     no_of_thresholds_reached = 0
     data = {"symbol": symbol["symbol"], "direction": "neutral", "thresholds": no_of_thresholds_reached}
-
     # Format pip difference based on pip size
     format_threshold = pip_difference / symbol["pip_size"]
 
     # Extract positive and negative differences from the symbol configuration
     positive_difference = symbol["positive_pip_difference"]
     negative_difference = symbol["negative_pip_difference"]
+
 
     # Check for positive direction
     if format_threshold >= positive_difference:
@@ -249,7 +250,9 @@ async def check_thresholds(symbol, pip_difference):
 
 async def check_thresholds_and_place_trades(symbol, start_price, current_price):
     difference = await fetch_pip_difference(current_price ,start_price)
-    print("check",difference)
+    data= await check_thresholds(symbol, difference)
+    print("data", data)
+    return data
 
 
 
