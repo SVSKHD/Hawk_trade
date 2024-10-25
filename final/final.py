@@ -48,6 +48,7 @@ async def fetch_and_print_price(symbol):
     try:
         # Fetch current price asynchronously
         current_price = await asyncio.to_thread(fetch_current_price, symbol_name)
+        start_price = await asyncio(fetch_start_price, symbol_name)
 
         if current_price is not None:
             print(f"Current price of {symbol_name}: {current_price}")
