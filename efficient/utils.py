@@ -247,6 +247,11 @@ async def check_thresholds(symbol, pip_difference):
     return data
 
 
+async def check_thresholds_and_place_trades(symbol, start_price, current_price):
+    difference = await fetch_pip_difference(current_price ,start_price)
+    print("check",difference)
+
+
 
 
 
