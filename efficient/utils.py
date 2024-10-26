@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from notifications import send_discord_message_async
 import asyncio
 
+
 async def connect_mt5():
     """Asynchronously initialize and log in to MetaTrader 5."""
     initialized = await asyncio.to_thread(mt5.initialize)
@@ -211,8 +212,38 @@ async def fetch_and_print_price(symbol_data):
         message = f"{symbol_name}: Start {start_price}, Current {current_price}, Pips: {pip_diff}"
         await send_discord_message_async(message)
 
+
+async def get_open_positions(symbol):
+    open_positions = {"position_exist":False, "no_of_positions":0}
+    symbol_name = symbol["symbol"]
+    positions = mt5.positions_get(symbol["symbol"])
+    if positions is None:
+        message = f"no postions exist in {symbol_name} at  {datetime.now()}"
+        await send_discord_message_async(message)
+        return open_positions
+    if len(positions)>0:
+        open_positions["positions_exist"]=True
+        open_positions["no_of_positions"] = len(positions)
+        return open_positions
+
+
 async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
+
+async def check_threshold_and_place_trade(symbol,action,threshold):
+    if threshold == 1:
+        result = await place_trade_notify(symbol["symbol"], action, symbol["lot_size"])
+        return result
+    elif threshold == 2:
+        position = await get_open_positions(symbol)
+        if position["position_exist"]:
+            result = await close_trades_by_symbol(symbol["symbol"])
+            return result
+
+
+async def check_threshold_and_close_trade(symbol, threshold):
+    if threshold==2:
+        await close_trades_by_symbol(symbol["symbol"])
 
 async def check_thresholds(symbol, pip_difference):
     no_of_thresholds_reached = 0
@@ -231,6 +262,7 @@ async def check_thresholds(symbol, pip_difference):
         data["direction"] = "up"
         data["thresholds"] = no_of_thresholds_reached
         print(f"Up direction, thresholds reached: {no_of_thresholds_reached}")
+
 
     # Check for negative direction
     elif format_threshold <= negative_difference:
