@@ -231,47 +231,47 @@ async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
 
 async def check_threshold_and_place_trade(symbol,action,threshold):
-    if threshold == 1:
+    if threshold == 1.0:
         result = await place_trade_notify(symbol["symbol"], action, symbol["lot_size"])
         return result
-    elif threshold == 2:
-        position = await get_open_positions(symbol)
-        if position["position_exist"]:
-            result = await close_trades_by_symbol(symbol["symbol"])
-            return result
 
 
 async def check_threshold_and_close_trade(symbol, threshold):
-    if threshold==2:
-        await close_trades_by_symbol(symbol["symbol"])
+    if threshold==2.0:
+        position = await get_open_positions(symbol)
+        if position:
+            result=await close_trades_by_symbol(symbol["symbol"])
+            return result
+
 
 async def check_thresholds(symbol, pip_difference):
     no_of_thresholds_reached = 0
     data = {"symbol": symbol["symbol"], "direction": "neutral", "thresholds": no_of_thresholds_reached}
-    # Format pip difference based on pip size
     format_threshold = pip_difference / symbol["pip_size"]
 
-    # Extract positive and negative differences from the symbol configuration
+
     positive_difference = symbol["positive_pip_difference"]
     negative_difference = symbol["negative_pip_difference"]
 
 
-    # Check for positive direction
     if format_threshold >= positive_difference:
         no_of_thresholds_reached = format_threshold // positive_difference
         data["direction"] = "up"
         data["thresholds"] = no_of_thresholds_reached
+        await check_threshold_and_place_trade(symbol, "buy", no_of_thresholds_reached)
+        await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
         print(f"Up direction, thresholds reached: {no_of_thresholds_reached}")
 
 
-    # Check for negative direction
     elif format_threshold <= negative_difference:
         no_of_thresholds_reached = abs(format_threshold) // abs(negative_difference)
         data["direction"] = "down"
         data["thresholds"] = no_of_thresholds_reached
+        await check_threshold_and_place_trade(symbol, "sell", no_of_thresholds_reached)
+        await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
         print(f"Down direction, thresholds reached: {no_of_thresholds_reached}")
 
-    # If the threshold is not reached, set to neutral
+
     else:
         data["direction"] = "neutral"
         data["thresholds"] = no_of_thresholds_reached
