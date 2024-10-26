@@ -39,6 +39,7 @@ async def scheduler(symbols):
         # Run updates concurrently for all symbols
         tasks = [send_hourly_update(symbol) for symbol in symbols]
         await asyncio.gather(*tasks)
+        await asyncio.sleep(1)
 
 
 async def start_scheduler(symbols):
