@@ -231,13 +231,13 @@ async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
 
 async def check_threshold_and_place_trade(symbol,action,threshold):
-    if threshold == 1.0:
+    if threshold == 1:
         result = await place_trade_notify(symbol["symbol"], action, symbol["lot_size"])
         return result
 
 
 async def check_threshold_and_close_trade(symbol, threshold):
-    if threshold==2.0:
+    if threshold==2:
         position = await get_open_positions(symbol)
         if position:
             result=await close_trades_by_symbol(symbol["symbol"])
