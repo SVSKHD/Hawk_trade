@@ -12,14 +12,18 @@ async def send_hourly_update(symbol):
         pip_difference = round((current_price - start_price) / symbol["pip_size"], 3)
         direction = "Upper" if pip_difference > 0 else "Down" if pip_difference < 0 else "Neutral"
         positions_open = get_open_positions(symbol["symbol"])
+
+        pips_to_positive_threshold = max(0, 10 - pip_difference)
+        pips_to_negative_threshold = max(0, 10 + pip_difference)
+
         update_data = {
             "symbol": symbol["symbol"],
             "start_price": start_price,
             "current_price": current_price,
             "pip_difference": pip_difference,
             "direction": direction,
-            "pips_to_positive_threshold": 10 - pip_difference if pip_difference < 10 else 0,
-            "pips_to_negative_threshold": 10 + pip_difference if pip_difference > -10 else 0,
+            "pips_to_positive_threshold": pips_to_positive_threshold,
+            "pips_to_negative_threshold": pips_to_negative_threshold,
             "positions_open": positions_open
         }
 
