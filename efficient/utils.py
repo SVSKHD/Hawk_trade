@@ -65,7 +65,7 @@ async def fetch_friday_closing_price(symbol):
     last_friday = last_friday.replace(hour=23, minute=59, second=59)
     utc_from = last_friday.astimezone(pytz.utc)
 
-    rates = await asyncio.to_thread(mt5.copy_rates_from, symbol, mt5.TIMEFRAME_M5, utc_from, 1)
+    rates = await asyncio.to_thread(mt5.copy_rates_from, symbol["symbol"], mt5.TIMEFRAME_M5, utc_from, 1)
     if rates is not None and len(rates) > 0:
         closing_price = rates[0]['close']
         print(f"Fetched last Friday's closing price for {symbol}: {closing_price}")
@@ -242,6 +242,11 @@ async def check_threshold_and_close_trade(symbol, threshold):
         if position:
             result=await close_trades_by_symbol(symbol["symbol"])
             return result
+
+async def check_hedging_possibility(symbol):
+    positions = await get_open_positions(symbol["symbol"])
+    if len(positions)>0:
+        print(len(positions))
 
 
 async def check_thresholds(symbol, pip_difference):
