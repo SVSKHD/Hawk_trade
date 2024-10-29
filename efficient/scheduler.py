@@ -7,11 +7,12 @@ from utils import get_open_positions
 async def send_hourly_update(symbol):
     start_price = await fetch_start_price(symbol)
     current_price = await fetch_current_price(symbol)
-
+    symbol_name = symbol["symbol"]
     if start_price is not None and current_price is not None:
         pip_difference = round((current_price - start_price) / symbol["pip_size"], 3)
         direction = "Upper" if pip_difference > 0 else "Down" if pip_difference < 0 else "Neutral"
         positions_open = get_open_positions(symbol["symbol"])
+
 
         pips_to_positive_threshold = max(0, 10 - pip_difference)
         pips_to_negative_threshold = max(0, 10 + pip_difference)
@@ -31,7 +32,7 @@ async def send_hourly_update(symbol):
         message = await format_message("hourly_update", update_data)
         await send_discord_message_async(message)
     else:
-        print(f"Failed to fetch prices for {symbol["symbol"]}")
+        print(f"Failed to fetch prices for {symbol_name}")
 
 
 async def scheduler(symbols):
