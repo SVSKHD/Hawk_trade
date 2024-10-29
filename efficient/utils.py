@@ -236,12 +236,29 @@ async def check_threshold_and_place_trade(symbol,action,threshold):
         return result
 
 
-async def check_threshold_and_close_trade(symbol, threshold):
-    if threshold==2:
-        position = await get_open_positions(symbol)
-        if position:
-            result=await close_trades_by_symbol(symbol["symbol"])
+async def check_threshold_and_close_trade(symbol, thresholds_reached):
+    # Ensure the function can handle any threshold greater than or equal to 2
+    if thresholds_reached >= 2:
+        symbol_name = symbol["symbol"]
+        message = f"{symbol_name} has reached {thresholds_reached} thresholds, attempting to close trades."
+        await send_discord_message_async(message)
+
+        position_data = await get_open_positions(symbol)
+
+        if position_data["positions_exist"]:
+            for _ in range(thresholds_reached):
+                result = await close_trades_by_symbol(symbol_name)
+                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                    error_msg = f"Failed to close position for {symbol_name}, retcode={result.retcode}"
+                    await send_discord_message_async(error_msg)
+                    break  # Stop trying if closing fails
+                success_msg = f"Successfully closed a position for {symbol_name}."
+                await send_discord_message_async(success_msg)
             return result
+        else:
+            no_position_msg = f"No open positions to close for {symbol_name}."
+            await send_discord_message_async(no_position_msg)
+
 
 async def check_hedging_possibility(symbol):
     positions = await get_open_positions(symbol["symbol"])
