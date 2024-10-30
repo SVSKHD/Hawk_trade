@@ -15,13 +15,17 @@ async def run_schedulers(symbols_config):
             await check_thresholds_and_place_trades(symbol, start_price, current_price)
         else:
             print(f"Failed to fetch prices for {symbol_name}")
-    await start_scheduler(symbols_config)
+
+async def periodic_task(interval, symbols_config):
+    while True:
+        await run_schedulers(symbols_config)
+        await asyncio.sleep(interval)
 
 if __name__ == "__main__":
     try:
         if asyncio.run(connect_mt5()):
             print("Connected to MetaTrader 5.")
-            asyncio.run(run_schedulers(symbols_config))
+            asyncio.run(periodic_task(1, symbols_config))  # Run every 1 second
         else:
             print("Failed to connect to MetaTrader 5.")
     except KeyboardInterrupt:
