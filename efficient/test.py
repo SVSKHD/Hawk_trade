@@ -1,31 +1,51 @@
 import asyncio
-from utils import (
-    connect_mt5,
-    fetch_current_price,
-    fetch_start_price,
-    place_trade_notify,
-    close_trades_by_symbol,
-    fetch_and_print_price
-)
+from scheduler import start_scheduler
+from config import symbols_config
+from utils import connect_mt5, fetch_start_price, fetch_current_price, check_thresholds_and_place_trades
 
-async def main():
-    # Test the connection to MetaTrader 5
-    print("Testing MT5 connection...")
-    connected = await connect_mt5()
-    if connected:
-        print("Connected to MT5 successfully.")
-    else:
-        print("Failed to connect to MT5.")
-        return  # Stop further tests if connection fails
+# Global dictionaries to store prices for each symbol
+start_prices = {}
+current_prices = {}
 
-    # Test fetching the current price for a symbol
-    symbol = {"symbol": "BTCUSD"}
-    current_price = await fetch_current_price(symbol)
-    print(f"Current price for {symbol['symbol']}: {current_price}")
-    #
-    # Test fetching the start price for the day for a symbol
-    start_price = await fetch_start_price(symbol)
-    print(f"Start price for {symbol['symbol']}: {start_price}")
+async def run_schedulers(symbols_config):
+    """Update start and current prices for each symbol."""
+    for symbol in symbols_config:
+        symbol_name = symbol["symbol"]
 
-# Run the main function to test
-asyncio.run(main())
+        # Fetch and update start and current prices in global dictionaries
+        start_prices[symbol_name] = await fetch_start_price(symbol)
+        current_prices[symbol_name] = await fetch_current_price(symbol)
+
+        # Log failure if prices couldn't be fetched
+        if start_prices[symbol_name] is None or current_prices[symbol_name] is None:
+            print(f"Failed to fetch prices for {symbol_name}")
+
+async def run_bot():
+    """Check thresholds and place trades using the latest prices from global dictionaries."""
+    for symbol in symbols_config:
+        symbol_name = symbol["symbol"]
+        start_price = start_prices.get(symbol_name)
+        current_price = current_prices.get(symbol_name)
+
+        # Ensure both start and current prices are available
+        if start_price is not None and current_price is not None:
+            await check_thresholds_and_place_trades(symbol, start_price, current_price)
+        else:
+            print(f"Skipping threshold check for {symbol_name} due to missing price data")
+
+async def periodic_task(interval, symbols_config):
+    """Periodically update prices and run trading bot tasks."""
+    while True:
+        await run_schedulers(symbols_config)  # Update prices
+        await run_bot()  # Run trading bot actions based on updated prices
+        await asyncio.sleep(interval)
+
+if __name__ == "__main__":
+    try:
+        if asyncio.run(connect_mt5()):
+            print("Connected to MetaTrader 5.")
+            asyncio.run(periodic_task(1, symbols_config))  # Run every 1 second
+        else:
+            print("Failed to connect to MetaTrader 5.")
+    except KeyboardInterrupt:
+        print("Scheduler stopped manually.")

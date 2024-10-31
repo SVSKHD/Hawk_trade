@@ -215,17 +215,22 @@ async def fetch_and_print_price(symbol_data):
 
 
 async def get_open_positions(symbol):
-    open_positions = {"position_exist":False, "no_of_positions":0}
+    """Fetch open positions for a symbol and return position details consistently."""
+    open_positions = {"positions_exist": False, "no_of_positions": 0}  # Set default values
     symbol_name = symbol["symbol"]
-    positions = mt5.positions_get(symbol["symbol"])
+
+    # Attempt to get open positions for the symbol
+    positions = await asyncio.to_thread(mt5.positions_get, symbol=symbol_name)
+
     if positions is None:
-        message = f"no postions exist in {symbol_name} at  {datetime.now()}"
+        # Notify if there are no positions or an error occurred
+        message = f"No positions exist for {symbol_name} at {datetime.now()}"
         await send_discord_message_async(message)
-        return open_positions
-    if len(positions)>0:
-        open_positions["positions_exist"]=True
+    elif len(positions) > 0:
+        open_positions["positions_exist"] = True
         open_positions["no_of_positions"] = len(positions)
-        return open_positions
+
+    return open_positions
 
 
 # trade_logic
@@ -288,10 +293,11 @@ async def check_thresholds(symbol, pip_difference):
         data["direction"] = "up"
         data["thresholds"] = no_of_thresholds_reached
         await check_threshold_and_place_trade(symbol, "buy", no_of_thresholds_reached)
+        print(f"Up direction, thresholds reached: {no_of_thresholds_reached}")
         await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
         await check_opposite_direction_and_close_trades_and_hedge(symbol, no_of_thresholds_reached, "sell")
 
-        print(f"Up direction, thresholds reached: {no_of_thresholds_reached}")
+
 
 
     elif format_threshold <= negative_difference:
@@ -299,9 +305,10 @@ async def check_thresholds(symbol, pip_difference):
         data["direction"] = "down"
         data["thresholds"] = no_of_thresholds_reached
         await check_threshold_and_place_trade(symbol, "sell", no_of_thresholds_reached)
+        print(f"Down direction, thresholds reached: {no_of_thresholds_reached}")
         await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
         await check_opposite_direction_and_close_trades_and_hedge(symbol, no_of_thresholds_reached, "buy")
-        print(f"Down direction, thresholds reached: {no_of_thresholds_reached}")
+
 
 
 
