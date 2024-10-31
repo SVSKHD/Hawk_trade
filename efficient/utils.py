@@ -3,6 +3,11 @@ import pytz
 from datetime import datetime, timedelta
 from notifications import send_discord_message_async
 import asyncio
+import logging
+
+async def log_error_and_notify(message):
+    logging.error(message)
+    await send_discord_message_async(message)
 
 
 async def connect_mt5():
@@ -36,26 +41,22 @@ async def fetch_current_price(symbol):
 
 async def fetch_start_price(symbol):
     symbol_name = symbol["symbol"]
-    """Asynchronously fetch the start price of the day for a symbol."""
-    ist = pytz.timezone('Asia/Kolkata')
-    now = datetime.now(ist)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
 
     if now.weekday() == 0:  # Monday
-        start_price = await fetch_friday_closing_price(symbol)
-    else:
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        utc_from = start_of_day.astimezone(pytz.utc)
+        return await fetch_friday_closing_price(symbol)
 
-        rates = await asyncio.to_thread(mt5.copy_rates_from, symbol_name, mt5.TIMEFRAME_M5, utc_from, 1)
-        if rates is not None and len(rates) > 0:
-            start_price = rates[0]['close']
-        else:
-            print(f"Failed to get start price for {symbol}")
-            return None
+    start_of_day_utc = now.replace(hour=0, minute=0, second=0).astimezone(pytz.utc)
+    rates = await asyncio.to_thread(mt5.copy_rates_from, symbol_name, mt5.TIMEFRAME_M5, start_of_day_utc, 1)
 
-    if start_price:
-        print(f"Fetched start price for {symbol}: {start_price}")
-    return start_price
+    if rates:
+        start_price = rates[0]["close"]
+        print(f"Fetched start price for {symbol_name}: {start_price}")
+        return start_price
+
+    await log_error_and_notify(f"Failed to get start price for {symbol_name}")
+    return None
+
 
 async def fetch_friday_closing_price(symbol):
     """Asynchronously fetch the last Friday's closing price for a symbol."""
@@ -227,14 +228,27 @@ async def get_open_positions(symbol):
         return open_positions
 
 
+# trade_logic
 async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
+
+
+async def check_opposite_direction_and_close_trades_and_hedge(symbol, threshold, direction):
+    symbol_name = symbol["symbol"]
+    if threshold <= 0.5:
+        position_data = await get_open_positions(symbol)
+
+        if position_data["positions_exist"] and position_data["no_of_positions"] > 1:
+            await close_trades_by_symbol(symbol_name)
+
+        for _ in range(3):
+            await place_trade_notify(symbol_name, direction, 1)
+
 
 async def check_threshold_and_place_trade(symbol,action,threshold):
     if threshold == 1:
         result = await place_trade_notify(symbol["symbol"], action, symbol["lot_size"])
         return result
-
 
 async def check_threshold_and_close_trade(symbol, thresholds_reached):
     # Ensure the function can handle any threshold greater than or equal to 2
@@ -259,13 +273,6 @@ async def check_threshold_and_close_trade(symbol, thresholds_reached):
             no_position_msg = f"No open positions to close for {symbol_name}."
             await send_discord_message_async(no_position_msg)
 
-
-async def check_hedging_possibility(symbol):
-    positions = await get_open_positions(symbol["symbol"])
-    if len(positions)>0:
-        print(len(positions))
-
-
 async def check_thresholds(symbol, pip_difference):
     no_of_thresholds_reached = 0
     data = {"symbol": symbol["symbol"], "direction": "neutral", "thresholds": no_of_thresholds_reached}
@@ -282,6 +289,8 @@ async def check_thresholds(symbol, pip_difference):
         data["thresholds"] = no_of_thresholds_reached
         await check_threshold_and_place_trade(symbol, "buy", no_of_thresholds_reached)
         await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
+        await check_opposite_direction_and_close_trades_and_hedge(symbol, no_of_thresholds_reached, "sell")
+
         print(f"Up direction, thresholds reached: {no_of_thresholds_reached}")
 
 
@@ -291,7 +300,9 @@ async def check_thresholds(symbol, pip_difference):
         data["thresholds"] = no_of_thresholds_reached
         await check_threshold_and_place_trade(symbol, "sell", no_of_thresholds_reached)
         await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
+        await check_opposite_direction_and_close_trades_and_hedge(symbol, no_of_thresholds_reached, "buy")
         print(f"Down direction, thresholds reached: {no_of_thresholds_reached}")
+
 
 
     else:
@@ -301,13 +312,10 @@ async def check_thresholds(symbol, pip_difference):
 
     return data
 
-
 async def check_thresholds_and_place_trades(symbol, start_price, current_price):
     difference = await fetch_pip_difference(current_price ,start_price)
     data= await check_thresholds(symbol, difference)
-    print("data", data)
     return data
-
 
 
 
