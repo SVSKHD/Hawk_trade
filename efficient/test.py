@@ -1,5 +1,4 @@
 import asyncio
-from scheduler import start_scheduler
 from config import symbols_config
 from utils import connect_mt5, fetch_start_price, fetch_current_price, check_thresholds_and_place_trades
 

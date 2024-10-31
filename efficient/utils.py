@@ -5,10 +5,31 @@ from notifications import send_discord_message_async
 import asyncio
 import logging
 
+
+# Global dictionary to store the last message time for each symbol
+last_message_time = {}
+
+# Define the interval between messages in seconds
+MESSAGE_INTERVAL = 60  # Example: 30 seconds
+
+
+
+
 async def log_error_and_notify(message):
     logging.error(message)
     await send_discord_message_async(message)
 
+async def send_limited_message(symbol, message):
+    current_time = datetime.now()
+    last_time = last_message_time.get(symbol)
+    if last_time is None or (current_time - last_time).total_seconds() > MESSAGE_INTERVAL:
+        # Send the message and update the last message time
+        logging.info(f"Sending message for {symbol}: {message}")
+        await send_discord_message_async(message)
+        last_message_time[symbol] = current_time  # Update last sent time
+    else:
+        # Skip sending the message to respect the rate limit
+        logging.info(f"Message for {symbol} rate-limited; not sent.")
 
 async def connect_mt5():
     """Asynchronously initialize and log in to MetaTrader 5."""
@@ -121,7 +142,7 @@ async def place_trade_notify(symbol, action, lot_size):
             message = f"Trade executed successfully at {now}, order={result}"
 
         print(message)
-        await send_discord_message_async(message)
+        await send_limited_message(symbol_name,message)
 
 async def close_trades_by_symbol(symbol):
     """Asynchronously close all open trades for a symbol."""
