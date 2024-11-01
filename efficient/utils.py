@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from notifications import send_discord_message_async
 import asyncio
 import logging
-
+from trade_codes import get_trade_return_description
 
 # Global dictionary to store the last message time for each symbol
 last_message_time = {}
@@ -90,6 +90,33 @@ async def fetch_start_price(symbol):
     await log_error_and_notify(f"Failed to get start price for {symbol_name}")
     return None
 
+async def fetch_price(symbol, price_type):
+    """Fetch price based on type, reusing code for start and current prices."""
+    symbol_name = symbol["symbol"]
+
+    # Ensure the symbol is selected in Market Watch
+    selected = await asyncio.to_thread(mt5.symbol_select, symbol_name, True)
+    if not selected:
+        await log_error_and_notify(f"Failed to select symbol {symbol_name} for fetching {price_type} price.")
+        return None
+
+    if price_type == "current":
+        tick = await asyncio.to_thread(mt5.symbol_info_tick, symbol_name)
+        if tick:
+            return tick.bid  # or tick.ask depending on requirements
+
+    elif price_type == "start":
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        if now.weekday() == 0:  # Monday
+            return await fetch_friday_closing_price(symbol)
+
+        start_of_day_utc = now.replace(hour=0, minute=0, second=0).astimezone(pytz.utc)
+        rates = await asyncio.to_thread(mt5.copy_rates_from, symbol_name, mt5.TIMEFRAME_M5, start_of_day_utc, 1)
+        if rates:
+            return rates[0]["close"]
+
+    await log_error_and_notify(f"Failed to get {price_type} price for {symbol_name}")
+    return None
 
 async def fetch_friday_closing_price(symbol):
     """Asynchronously fetch the last Friday's closing price for a symbol."""
@@ -249,7 +276,6 @@ async def fetch_and_print_price(symbol_data):
         message = f"{symbol_name}: Start {start_price}, Current {current_price}, Pips: {pip_diff}"
         await send_discord_message_async(message)
 
-
 async def get_open_positions(symbol):
     """Fetch open positions for a symbol and return position details consistently."""
     open_positions = {"positions_exist": False, "no_of_positions": 0}  # Set default values
@@ -268,11 +294,8 @@ async def get_open_positions(symbol):
 
     return open_positions
 
-
-# trade_logic
 async def fetch_pip_difference(current_price, start_price):
     return current_price-start_price
-
 
 async def check_opposite_direction_and_close_trades_and_hedge(symbol, threshold, direction):
     symbol_name = symbol["symbol"]
@@ -284,7 +307,6 @@ async def check_opposite_direction_and_close_trades_and_hedge(symbol, threshold,
 
         for _ in range(3):
             await place_trade_notify(symbol_name, direction, 1)
-
 
 async def check_threshold_and_place_trade(symbol,action,threshold):
     if threshold == 1:
@@ -301,12 +323,21 @@ async def check_threshold_and_close_trade(symbol, thresholds_reached):
         position_data = await get_open_positions(symbol)
 
         if position_data["positions_exist"]:
-            for _ in range(thresholds_reached):
+            # Cast thresholds_reached to an integer before using in range
+            for _ in range(int(thresholds_reached)):  # Corrected here to convert to int
                 result = await close_trades_by_symbol(symbol_name)
-                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+
+                # Check if result is None before accessing retcode
+                if result is None:
+                    error_msg = f"Failed to close position for {symbol_name}; result is None."
+                    await send_discord_message_async(error_msg)
+                    break  # Stop trying if closing fails
+
+                if result.retcode != mt5.TRADE_RETCODE_DONE:
                     error_msg = f"Failed to close position for {symbol_name}, retcode={result.retcode}"
                     await send_discord_message_async(error_msg)
                     break  # Stop trying if closing fails
+
                 success_msg = f"Successfully closed a position for {symbol_name}."
                 await send_discord_message_async(success_msg)
             return result
@@ -353,6 +384,7 @@ async def check_thresholds(symbol, pip_difference):
         data["direction"] = "neutral"
         data["thresholds"] = no_of_thresholds_reached
         print(f"Neutral direction, Noo thresholds reached.{symbol_name}")
+        await check_threshold_and_close_trade(symbol, no_of_thresholds_reached)
 
     return data
 
