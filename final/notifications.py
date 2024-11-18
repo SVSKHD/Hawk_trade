@@ -21,6 +21,21 @@ async def send_discord_message_async(message):
         except Exception as e:
             print(f"Error sending message: {e}")
 
+async def send_Trade_discord_message_async(message):
+    webhook_url = "https://discord.com/api/webhooks/1305415279303458866/JkDauJ4ZSc0ACmz6DP01dPmtqIsGO12mz5SspSBAEUUpYrXUznEtSuQrCYG3czHmQ9Ny"
+    data = {"content": message}
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(webhook_url, json=data) as response:
+                if response.status == 204:
+                    print("Message sent successfully!")
+                else:
+                    print(f"Failed to send message: {response.status}, {await response.text()}")
+        except Exception as e:
+            print(f"Error sending message: {e}")
+
+
 async def send_limited_message(symbol, message):
     current_time = datetime.now()
     last_time = last_message_time.get(symbol)

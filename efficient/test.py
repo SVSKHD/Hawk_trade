@@ -1,6 +1,6 @@
 import asyncio
 from config import symbols_config
-from utils import connect_mt5, fetch_start_price, fetch_current_price, check_thresholds_and_place_trades
+from utils2 import connect_mt5, fetch_start_price, fetch_current_price, check_thresholds_and_place_trades
 
 # Global dictionaries to store prices for each symbol
 start_prices = {}
